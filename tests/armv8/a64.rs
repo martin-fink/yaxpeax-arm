@@ -51,6 +51,12 @@ fn test_sve() {
 }
 
 #[test]
+fn test_sme() {
+    // SME outer product
+    test_err([0x00, 0x00, 0xc0, 0x80], DecodeError::IncompleteDecoder);
+}
+
+#[test]
 fn test_unpredictable() {
     // could be stx/ldx but Lo1 is `x1` and invalid.
     test_err([0x00, 0x00, 0x20, 0x08], DecodeError::InvalidOperand);
@@ -302,6 +308,40 @@ fn test_decode_arithmetic() {
             ]
         }
     );
+}
+
+#[test]
+fn test_decode_udf() {
+    test_decode(
+        [0x00, 0x00, 0x00, 0x00],
+        Instruction {
+            opcode: Opcode::UDF,
+            operands: [
+                Operand::Imm16(0),
+                Operand::Nothing,
+                Operand::Nothing,
+                Operand::Nothing,
+            ]
+        }
+    );
+    test_decode(
+        [0xfe, 0xca, 0x00, 0x00],
+        Instruction {
+            opcode: Opcode::UDF,
+            operands: [
+                Operand::Imm16(0xcafe),
+                Operand::Nothing,
+                Operand::Nothing,
+                Operand::Nothing,
+            ]
+        }
+    );
+}
+
+#[test]
+fn test_display_udf() {
+    test_display([0x00, 0x00, 0x00, 0x00], "udf #0x0");
+    test_display([0xfe, 0xca, 0x00, 0x00], "udf #0xcafe");
 }
 
 #[test]

@@ -1145,6 +1145,7 @@ impl SysOps {
 #[allow(missing_docs)]
 pub enum Opcode {
     Invalid,
+    UDF,
     MOVN,
     MOVK,
     MOVZ,
@@ -1737,6 +1738,7 @@ impl Display for Opcode {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         let text = match *self {
             Opcode::Invalid => "invalid",
+            Opcode::UDF => "udf",
             Opcode::MOVK => "movk",
             Opcode::ADC => "adc",
             Opcode::ADCS => "adcs",
@@ -3178,8 +3180,8 @@ impl Decoder<ARMv8> for InstDecoder {
             DataProcessingSimd2,
             DataProcessingImmediate,
             BranchExceptionSystem,
-            SME,
             SVE,
+            ReservedSME,
         }
 
         // from ARM architecture refrence manual for ARMv8, C3.1
@@ -3196,7 +3198,7 @@ impl Decoder<ARMv8> for InstDecoder {
 
         let section_bits = word >> 25;
         static SECTIONS: [Section; 16] = [
-            Section::SME,                            // 0000 // SME encodings
+            Section::ReservedSME,                    // 0000 // reserved or SME encodings
             Section::Unallocated,                    // 0001
             Section::SVE,                            // 0010 // SVE encodings
             Section::Unallocated,                    // 0011
@@ -3213,12 +3215,28 @@ impl Decoder<ARMv8> for InstDecoder {
             Section::LoadStore,                      // 1110
             Section::DataProcessingSimd2,            // 1111
         ];
-        let section = SECTIONS[(section_bits & 0x0f) as usize];
+        let section = SECTIONS[(section_bits & 0b1111) as usize];
 
 //        crate::armv8::a64::std::eprintln!("word: {:#x}, bits: {:#b}", word, section_bits & 0xf);
 
+        let op0 = (word >> 31) & 1;
         match section {
-            Section::SME => {
+            // Reserved encodings
+            Section::ReservedSME if op0 == 0 => {
+                let op1 = (word >> 16) & 0b1111_1111;
+                if op1 != 0 {
+                    return Err(DecodeError::IncompleteDecoder);
+                }
+                inst.opcode = Opcode::UDF;
+                inst.operands = [
+                    Operand::Imm16((word & 0xffff) as u16),
+                    Operand::Nothing,
+                    Operand::Nothing,
+                    Operand::Nothing,
+                ];
+            },
+            // SME encodings
+            Section::ReservedSME => {
                 return Err(DecodeError::IncompleteDecoder);
             },
             Section::SVE => {
